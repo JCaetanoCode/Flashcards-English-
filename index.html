@@ -25,6 +25,13 @@
     <span>📚 <b id="statTotal">0</b> cards</span>
   </div>
 
+  <!-- FILTROS -->
+  <div class="filters">
+    <button class="filter-btn active" data-filter="all">Todas</button>
+    <button class="filter-btn" data-filter="dominated">Dominadas</button>
+    <button class="filter-btn" data-filter="not-dominated">Não Dominadas</button>
+  </div>
+
   <div class="cat-accordion" id="catAccordion">
     <div class="cat-header" id="catHeader">
       <span>📂 Categoria Ativa: <span class="cat-current" id="catCurrent">Geral</span></span>
@@ -52,7 +59,6 @@
     </div>
   </div>
 
-  <!-- CONTADOR -->
   <div id="deckCounter"></div>
 
   <div class="actions">
@@ -89,7 +95,17 @@
     <h2>📋 Meus cards (<span id="listCount">0</span>)</h2>
     <div class="card-list" id="cardList"></div>
   </div>
-</div>
+
+  <!-- ZONA DE PERIGO (Agora dentro da div .app) -->
+  <div class="panel" style="border: 1px solid var(--wrong-bg);">
+    <h2 style="color: var(--wrong-text);">⚠️ Zona de Perigo</h2>
+    <div class="io-row">
+      <button id="btnResetStats" style="color: var(--wrong-text); border-color: var(--wrong-bg);">🔄 Zerar Placar (Acertos/Erros)</button>
+      <button id="btnResetAll" style="background: var(--wrong-bg); color: var(--wrong-text); border-color: transparent;">🗑️ Apagar Todos os Cards</button>
+    </div>
+  </div>
+
+</div> <!-- Fim da div .app -->
 
 <div class="toast" id="toast"></div>
 
