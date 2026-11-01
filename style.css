@@ -406,3 +406,44 @@ header h1 .subtitle { font-size: 0.7rem; color: var(--text-muted); font-weight: 
   header h1 { font-size: 1.1rem; }
   .io-row button, .io-row label { min-width: 100%; }
 }
+/* ESTILOS NOVOS: Filtros e Botão de Check */
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border-radius: 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: var(--btn-hover);
+}
+
+.filter-btn.active {
+  background: var(--nav-bg);
+  color: var(--nav-text);
+  border-color: var(--nav-text);
+  font-weight: 600;
+}
+
+/* Botão de check na lista */
+.list-item .btn-check {
+  color: var(--text-light);
+  font-size: 1.1rem;
+}
+
+.list-item .btn-check.dominated {
+  color: var(--right-text); /* Verde se estiver dominada */
+}
