@@ -13,7 +13,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
 const docRef = doc(db, "flashcards", "data");
 
 let cards = [];
@@ -26,6 +25,7 @@ let currentIndex = 0;
 let flipped = false;
 let syncTimeout = null;
 let isFirstLoad = true;
+let currentFilter = "all"; // NOVO: Guarda o filtro atual ("all", "dominated", "not-dominated")
 
 const THEME_KEY = "flashcards_theme";
 
@@ -41,7 +41,8 @@ function initRealtimeListener() {
     if (docSnap.exists()) {
       const data = docSnap.data();
       
-      cards = data.cards || [];
+      // Garante que todos os cards antigos tenham a propriedade 'dominated'
+      cards = (data.cards || []).map(c => ({ ...c, dominated: c.dominated || false }));
       categories = data.categories || ["Geral"];
       stats = data.stats || { right: 0, wrong: 0 };
       
@@ -91,7 +92,17 @@ function toast(msg) {
 }
 
 function buildDeck() {
-  deck = cards.filter(c => c.cat === activeCategory);
+  // Filtra primeiro pela categoria ativa
+  let filtered = cards.filter(c => c.cat === activeCategory);
+  
+  // Aplica o filtro de dominadas
+  if (currentFilter === "dominated") {
+    filtered = filtered.filter(c => c.dominated === true);
+  } else if (currentFilter === "not-dominated") {
+    filtered = filtered.filter(c => c.dominated !== true);
+  }
+  
+  deck = filtered;
   if (currentIndex >= deck.length) currentIndex = 0;
   if (deck.length === 0) currentIndex = 0;
 }
@@ -158,9 +169,9 @@ function updateStats() {
   const counterEl = $("deckCounter");
   if (counterEl) {
     if (deck.length > 0) {
-      counterEl.textContent = `Card ${currentIndex + 1} de ${deck.length} nesta categoria`;
+      counterEl.textContent = `Card ${currentIndex + 1} de ${deck.length} nesta visualização`;
     } else {
-      counterEl.textContent = `Nenhum card nesta categoria`;
+      counterEl.textContent = `Nenhum card nesta visualização`;
     }
   }
 }
@@ -169,7 +180,7 @@ function renderCard() {
   if (deck.length === 0) {
     langFront.textContent = direction === "pt-en" ? "Português" : "Inglês";
     langBack.textContent = direction === "pt-en" ? "Inglês" : "Português";
-    textFront.textContent = `Nenhum card em "${activeCategory}".`;
+    textFront.textContent = `Nenhum card encontrado.`;
     textBack.textContent = "—";
     cardEl.classList.remove("flipped");
     flipped = false;
@@ -196,7 +207,7 @@ function renderList() {
   list.innerHTML = "";
   
   if (deck.length === 0) {
-    list.innerHTML = '<div style="color:var(--text-light);font-size:0.85rem;padding:8px 0;">Nenhum card nesta categoria.</div>';
+    list.innerHTML = '<div style="color:var(--text-light);font-size:0.85rem;padding:8px 0;">Nenhum card nesta visualização.</div>';
     return;
   }
 
@@ -210,6 +221,20 @@ function renderList() {
     pair.className = "pair";
     pair.innerHTML = `<b>${escapeHtml(c.en)}</b> <span>| ${escapeHtml(c.pt)}</span>`;
     
+    // NOVO BOTÃO DE CHECK (DOMINADA)
+    const checkBtn = document.createElement("button");
+    checkBtn.className = "btn-check" + (c.dominated ? " dominated" : "");
+    checkBtn.textContent = "✔";
+    checkBtn.title = c.dominated ? "Marcar como não dominada" : "Marcar como dominada";
+    checkBtn.onclick = () => {
+      if(realIndex > -1) {
+        cards[realIndex].dominated = !cards[realIndex].dominated;
+        saveToCloud(); 
+        buildDeck(); // Reconstrói o baralho com o novo filtro
+        updateUI();
+      }
+    };
+
     const editBtn = document.createElement("button");
     editBtn.textContent = "✏️";
     editBtn.title = "Editar";
@@ -273,6 +298,7 @@ function renderList() {
     };
     
     div.appendChild(pair);
+    div.appendChild(checkBtn); // Adiciona o botão de check
     div.appendChild(editBtn);
     div.appendChild(delBtn);
     list.appendChild(div);
@@ -386,7 +412,8 @@ $("btnAdd").onclick = () => {
   const en = $("inputEN").value.trim();
   const pt = $("inputPT").value.trim();
   if (!en || !pt) { toast("Preencha os dois campos"); return; }
-  cards.push({ en, pt, cat: activeCategory });
+  // Adiciona o card já com 'dominated: false'
+  cards.push({ en, pt, cat: activeCategory, dominated: false });
   saveToCloud();
   $("inputEN").value = "";
   $("inputPT").value = "";
@@ -400,6 +427,22 @@ $("btnAdd").onclick = () => {
     if (e.key === "Enter") $("btnAdd").click();
   });
 });
+
+// BOTÕES DE FILTRO
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.onclick = (e) => {
+    // Remove active de todos
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    // Adiciona no clicado
+    e.target.classList.add('active');
+    // Muda o filtro global e reconstrói
+    currentFilter = e.target.getAttribute('data-filter');
+    currentIndex = 0; // Reseta o card atual para o início da nova lista
+    buildDeck();
+    updateUI();
+  };
+});
+
 $("btnTranslate").onclick = async () => {
   const inputEN = $("inputEN");
   const inputPT = $("inputPT");
@@ -469,7 +512,8 @@ function download(filename, content, mime) {
 
 $("btnExportTxt").onclick = () => {
   if (cards.length === 0) { toast("Nada para exportar"); return; }
-  const lines = cards.map((c) => `(${c.en} | ${c.pt} | ${c.cat})`).join("\n");
+  // Exporta: (Inglês | Português | Categoria | Dominada)
+  const lines = cards.map((c) => `(${c.en} | ${c.pt} | ${c.cat} | ${c.dominated ? '1' : '0'})`).join("\n");
   download("flashcards.txt", lines);
   toast("TXT exportado com sucesso");
 };
@@ -477,7 +521,7 @@ $("btnExportTxt").onclick = () => {
 $("btnExportJson").onclick = () => {
   const data = {
     app: "flashcards",
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     cards: cards,
     categories: categories,
@@ -491,7 +535,7 @@ $("btnExportJson").onclick = () => {
 function processImport(importedCards) {
   if (importedCards.length === 0) { toast("Nenhuma frase válida encontrada"); return; }
   importedCards.forEach(c => {
-    cards.push({ en: c.en, pt: c.pt, cat: activeCategory });
+    cards.push({ en: c.en, pt: c.pt, cat: activeCategory, dominated: c.dominated || false });
   });
   saveToCloud();
   buildDeck();
@@ -516,7 +560,9 @@ $("fileTxt").addEventListener("change", (e) => {
       if (parts.length >= 2) {
         const en = parts[0].trim();
         const pt = parts[1].trim();
-        if (en && pt) parsed.push({ en, pt });
+        // Se tiver o 4º item (dominada), lê ele.
+        const dominated = parts.length >= 4 ? (parts[3].trim() === "1") : false;
+        if (en && pt) parsed.push({ en, pt, dominated });
       }
     }
     processImport(parsed);
@@ -540,7 +586,8 @@ $("fileJson").addEventListener("change", (e) => {
         .filter(c => c && (c.en || c.pt))
         .map(c => ({ 
           en: String(c.en || ""), 
-          pt: String(c.pt || "")
+          pt: String(c.pt || ""),
+          dominated: Boolean(c.dominated)
         }))
         .filter(c => c.en && c.pt);
 
@@ -558,5 +605,38 @@ if (savedTheme) {
   document.documentElement.setAttribute('data-theme', savedTheme);
   $("themeBtn").textContent = savedTheme === 'dark' ? '☀️' : '🌙';
 }
+
+// --- ZONA DE PERIGO: RESET ---
+$("btnResetStats").onclick = () => {
+  if (confirm("Tem certeza que deseja zerar o placar de Acertos e Erros?\n\n(Suas frases NÃO serão apagadas).")) {
+    stats.right = 0;
+    stats.wrong = 0;
+    saveToCloud();
+    updateStats();
+    toast("Placar zerado com sucesso!");
+  }
+};
+
+$("btnResetAll").onclick = () => {
+  const check = confirm("🚨 ATENÇÃO: Isso vai apagar TODOS os cards e categorias de todos os dispositivos!\n\nTem certeza absoluta que deseja continuar?");
+  if (check) {
+    const check2 = confirm("Última confirmação: Deseja mesmo apagar TODOS os dados?");
+    if (check2) {
+      cards = [];
+      categories = ["Geral"];
+      stats = { right: 0, wrong: 0 };
+      activeCategory = "Geral";
+      currentFilter = "all";
+      
+      // Reseta a interface para o padrão
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.filter-btn[data-filter="all"]').classList.add('active');
+      
+      saveToCloud();
+      updateUI();
+      toast("Todos os dados foram apagados.");
+    }
+  }
+};
 
 initRealtimeListener();
